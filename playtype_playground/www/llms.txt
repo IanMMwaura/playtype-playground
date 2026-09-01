@@ -1,0 +1,17 @@
+# Playtype Playground
+
+Playtype Playground is a Shiny for Python dashboard for NBA playtype statistics.
+
+## Primary content
+
+- /: Player filters, scatter plot, player details, comparisons, season history, and PPP rankings.
+- /privacy.html: Privacy information.
+- /terms.html: Terms of use.
+
+## Data note
+
+The dashboard reads a local CSV of regular-season NBA playtype results collected through nba_api. Run playtype_playground/fetch_nba_data.py to refresh it.
+
+## Crawler policy
+
+Public pages may be indexed and used for retrieval. See /robots.txt for crawler directives.

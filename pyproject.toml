@@ -1,0 +1,19 @@
+[project]
+name = "playtype-playground"
+version = "0.1.0"
+description = "Shiny dashboard for NBA playtype data"
+readme = "playtype_playground/README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "shiny>=1.5,<2",
+    "plotly>=6.5,<7",
+    "pandas>=2.2,<4",
+    "numpy>=2.0,<3",
+    "nba_api>=1.11.4,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

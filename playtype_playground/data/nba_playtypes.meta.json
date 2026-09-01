@@ -1,0 +1,36 @@
+{
+  "source": "NBA Stats via nba_api",
+  "source_endpoint": "nba_api.stats.endpoints.SynergyPlayTypes",
+  "position_endpoint": "nba_api.stats.endpoints.PlayerIndex",
+  "nba_api_version": "1.11.4",
+  "fetched_at_utc": "2026-08-29T05:19:06+00:00",
+  "season_type": "Regular Season",
+  "seasons": [
+    "2012-13",
+    "2013-14",
+    "2014-15",
+    "2015-16",
+    "2016-17",
+    "2017-18",
+    "2018-19",
+    "2019-20",
+    "2020-21",
+    "2021-22",
+    "2022-23",
+    "2023-24",
+    "2024-25",
+    "2025-26"
+  ],
+  "play_types": [
+    "Isolation",
+    "P&R Ball Handler",
+    "P&R Roll Man",
+    "Post Up",
+    "Spot Up",
+    "Transition",
+    "Hand Off",
+    "Cut",
+    "Off Screen"
+  ],
+  "rows": 34721
+}

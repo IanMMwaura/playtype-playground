@@ -1,0 +1,5 @@
+shiny>=1.5,<2
+plotly>=6.5,<7
+pandas>=2.2,<4
+numpy>=2.0,<3
+nba_api>=1.11.4,<2
