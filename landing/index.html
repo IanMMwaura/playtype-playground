@@ -8,8 +8,10 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="Playtype Playground | NBA Analytics">
   <meta property="og:description" content="Explore NBA playtype volume and efficiency by player, team, and season.">
-  <meta property="og:image" content="https://raw.githubusercontent.com/IanMMwaura/playtype-playground/main/landing/social-preview.svg">
+  <meta property="og:url" content="https://playtype-playground.pages.dev/">
+  <meta property="og:image" content="https://playtype-playground.pages.dev/social-preview.svg">
   <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://playtype-playground.pages.dev/">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     :root {
@@ -34,36 +36,36 @@
       min-width: 320px;
       min-height: 100vh;
       margin: 0;
-      background:
-        radial-gradient(circle at 78% 22%, rgba(0, 122, 51, 0.14), transparent 28rem),
-        linear-gradient(180deg, #08131d 0%, var(--ink-950) 58%);
+      background: linear-gradient(180deg, #08131d 0%, var(--ink-950) 58%);
     }
 
-    header,
     main,
     footer {
       width: min(1120px, calc(100% - 40px));
       margin-inline: auto;
     }
 
-    header {
-      display: flex;
-      min-height: 82px;
-      align-items: center;
-      border-bottom: 1px solid var(--line);
+    .hero-heading {
+      margin: 0;
     }
 
-    .brand {
+    .hero-brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 18px;
+      margin: 16px 0 24px;
       color: var(--paper);
       text-decoration: none;
     }
 
-    .brand img {
-      width: 42px;
-      height: 42px;
+    .hero-brand:focus-visible {
+      outline: 3px solid rgba(0, 122, 51, 0.45);
+      outline-offset: 4px;
+    }
+
+    .hero-brand img {
+      width: 66px;
+      height: 66px;
     }
 
     .brand-copy {
@@ -72,7 +74,7 @@
     }
 
     .brand-name {
-      font-size: 15px;
+      font-size: clamp(22px, 3vw, 32px);
       font-weight: 850;
       letter-spacing: 0.08em;
     }
@@ -88,19 +90,11 @@
 
     main {
       display: grid;
-      min-height: calc(100vh - 154px);
+      min-height: calc(100vh - 72px);
       grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
       align-items: center;
       gap: clamp(42px, 8vw, 104px);
       padding-block: 72px;
-    }
-
-    h1 {
-      max-width: 760px;
-      margin: 16px 0 20px;
-      font-size: clamp(44px, 7vw, 78px);
-      line-height: 0.96;
-      letter-spacing: -0.055em;
     }
 
     .intro {
@@ -140,16 +134,9 @@
       transform: translateY(-1px);
     }
 
-    .primary-action:focus-visible,
-    .source-link:focus-visible {
+    .primary-action:focus-visible {
       outline: 3px solid rgba(0, 122, 51, 0.45);
       outline-offset: 4px;
-    }
-
-    .source-link {
-      color: #9fb0bd;
-      font-size: 13px;
-      text-underline-offset: 4px;
     }
 
     .feature-panel {
@@ -165,7 +152,6 @@
 
     .panel-heading strong {
       display: block;
-      margin-top: 8px;
       font-size: 18px;
     }
 
@@ -239,14 +225,18 @@
     }
 
     @media (max-width: 520px) {
-      header,
       main,
       footer {
         width: min(100% - 28px, 1120px);
       }
 
-      h1 {
-        font-size: 46px;
+      .hero-brand img {
+        width: 56px;
+        height: 56px;
+      }
+
+      .brand-name {
+        font-size: 20px;
       }
 
       footer {
@@ -265,20 +255,18 @@
   </style>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/" aria-label="Playtype Playground home">
-      <img src="/favicon.svg" alt="">
-      <span class="brand-copy">
-        <span class="brand-name">PLAYTYPE PLAYGROUND</span>
-        <span class="brand-kicker">NBA ANALYTICS</span>
-      </span>
-    </a>
-  </header>
-
   <main>
     <section aria-labelledby="page-title">
       <span class="eyebrow">NBA PLAYTYPE DATA · 2012–PRESENT</span>
-      <h1 id="page-title">See how every possession takes shape.</h1>
+      <h1 class="hero-heading" id="page-title">
+        <a class="hero-brand" href="/" aria-label="Playtype Playground home">
+          <img src="/favicon.svg" alt="">
+          <span class="brand-copy">
+            <span class="brand-name">PLAYTYPE PLAYGROUND</span>
+            <span class="brand-kicker">NBA ANALYTICS</span>
+          </span>
+        </a>
+      </h1>
       <p class="intro">
         Explore player volume and efficiency, compare playtype profiles, and follow performance across seasons.
       </p>
@@ -286,16 +274,12 @@
         <a class="primary-action" href="https://01a05dbc-7622-f0c3-9811-90f4e4d2216f.share.connect.posit.cloud/">
           Open dashboard
         </a>
-        <a class="source-link" href="https://github.com/IanMMwaura/playtype-playground">
-          View source on GitHub
-        </a>
       </div>
     </section>
 
     <aside class="feature-panel" aria-label="Dashboard features">
       <div class="panel-heading">
-        <span class="eyebrow">WHAT YOU CAN EXPLORE</span>
-        <strong>One view of the possession game</strong>
+        <strong>Features</strong>
       </div>
       <ul class="feature-list">
         <li>

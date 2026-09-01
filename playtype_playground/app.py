@@ -345,22 +345,27 @@ def sortable_header(label: str, column: int, *, title: str = ""):
 
 
 brand = ui.div(
-    ui.div(
-        ui.HTML(
-            '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">'
-            '<circle cx="32" cy="32" r="19" fill="#071018"/>'
-            '<g fill="none" stroke="#007a33" stroke-width="3" stroke-linecap="round">'
-            '<path d="M13 32h38"/>'
-            '<path d="M32 13c-10 9-10 29 0 38"/>'
-            '<path d="M32 13c10 9 10 29 0 38"/>'
-            '</g></svg>'
+    ui.tags.a(
+        ui.div(
+            ui.HTML(
+                '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">'
+                '<circle cx="32" cy="32" r="19" fill="#071018"/>'
+                '<g fill="none" stroke="#007a33" stroke-width="3" stroke-linecap="round">'
+                '<path d="M13 32h38"/>'
+                '<path d="M32 13c-10 9-10 29 0 38"/>'
+                '<path d="M32 13c10 9 10 29 0 38"/>'
+                '</g></svg>'
+            ),
+            class_="brand-mark",
         ),
-        class_="brand-mark",
-    ),
-    ui.div(
-        ui.tags.span("PLAYTYPE PLAYGROUND", class_="brand-name"),
-        ui.tags.span("NBA ANALYTICS", class_="brand-kicker"),
-        class_="brand-copy",
+        ui.div(
+            ui.tags.span("PLAYTYPE PLAYGROUND", class_="brand-name"),
+            ui.tags.span("NBA ANALYTICS", class_="brand-kicker"),
+            class_="brand-copy",
+        ),
+        href="/",
+        class_="brand-home",
+        aria_label="Go to the dashboard home page",
     ),
     ui.div(ui.input_dark_mode(id="color_mode", mode="dark"), class_="theme-control"),
     class_="brand",
