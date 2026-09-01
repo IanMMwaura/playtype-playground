@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playtype Playground | NBA Analytics</title>
+  <meta name="description" content="Explore NBA playtype volume and efficiency by player, team, and season.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Playtype Playground | NBA Analytics">
+  <meta property="og:description" content="Explore NBA playtype volume and efficiency by player, team, and season.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/IanMMwaura/playtype-playground/main/landing/social-preview.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink-950: #071018;
+      --ink-900: #09141e;
+      --ink-850: #0d1925;
+      --line: rgba(151, 173, 194, 0.16);
+      --paper: #e3e8ec;
+      --muted: #8795a2;
+      --accent: #007a33;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--ink-950);
+      color: var(--paper);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(circle at 78% 22%, rgba(0, 122, 51, 0.14), transparent 28rem),
+        linear-gradient(180deg, #08131d 0%, var(--ink-950) 58%);
+    }
+
+    header,
+    main,
+    footer {
+      width: min(1120px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    header {
+      display: flex;
+      min-height: 82px;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--paper);
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 5px;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+    }
+
+    .brand-kicker,
+    .eyebrow {
+      color: #8aa7bd;
+      font-size: 9px;
+      font-weight: 750;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+    }
+
+    main {
+      display: grid;
+      min-height: calc(100vh - 154px);
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+      align-items: center;
+      gap: clamp(42px, 8vw, 104px);
+      padding-block: 72px;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 16px 0 20px;
+      font-size: clamp(44px, 7vw, 78px);
+      line-height: 0.96;
+      letter-spacing: -0.055em;
+    }
+
+    .intro {
+      max-width: 650px;
+      margin: 0 0 32px;
+      color: #a0afbc;
+      font-size: clamp(17px, 2vw, 20px);
+      line-height: 1.65;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .primary-action {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 22px;
+      color: #fff;
+      background: var(--accent);
+      border: 1px solid #089546;
+      border-radius: 2px;
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      transition: transform 160ms ease, background 160ms ease;
+    }
+
+    .primary-action:hover {
+      background: #009640;
+      transform: translateY(-1px);
+    }
+
+    .primary-action:focus-visible,
+    .source-link:focus-visible {
+      outline: 3px solid rgba(0, 122, 51, 0.45);
+      outline-offset: 4px;
+    }
+
+    .source-link {
+      color: #9fb0bd;
+      font-size: 13px;
+      text-underline-offset: 4px;
+    }
+
+    .feature-panel {
+      background: rgba(13, 25, 37, 0.82);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+    }
+
+    .panel-heading {
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-heading strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 18px;
+    }
+
+    .feature-list {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .feature-list li {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      padding: 19px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .feature-list li:last-child {
+      border-bottom: 0;
+    }
+
+    .feature-number {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .feature-copy strong,
+    .feature-copy span {
+      display: block;
+    }
+
+    .feature-copy strong {
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
+    .feature-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    footer {
+      display: flex;
+      min-height: 72px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: #627586;
+      border-top: 1px solid var(--line);
+      font-size: 11px;
+    }
+
+    footer a {
+      color: #8195a5;
+    }
+
+    @media (max-width: 820px) {
+      main {
+        min-height: auto;
+        grid-template-columns: 1fr;
+        padding-block: 56px;
+      }
+
+      .feature-panel {
+        max-width: 560px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      header,
+      main,
+      footer {
+        width: min(100% - 28px, 1120px);
+      }
+
+      h1 {
+        font-size: 46px;
+      }
+
+      footer {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        padding-block: 18px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .primary-action {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/" aria-label="Playtype Playground home">
+      <img src="/favicon.svg" alt="">
+      <span class="brand-copy">
+        <span class="brand-name">PLAYTYPE PLAYGROUND</span>
+        <span class="brand-kicker">NBA ANALYTICS</span>
+      </span>
+    </a>
+  </header>
+
+  <main>
+    <section aria-labelledby="page-title">
+      <span class="eyebrow">NBA PLAYTYPE DATA · 2012–PRESENT</span>
+      <h1 id="page-title">See how every possession takes shape.</h1>
+      <p class="intro">
+        Explore player volume and efficiency, compare playtype profiles, and follow performance across seasons.
+      </p>
+      <div class="actions">
+        <a class="primary-action" href="https://01a05dbc-7622-f0c3-9811-90f4e4d2216f.share.connect.posit.cloud/">
+          Open dashboard
+        </a>
+        <a class="source-link" href="https://github.com/IanMMwaura/playtype-playground">
+          View source on GitHub
+        </a>
+      </div>
+    </section>
+
+    <aside class="feature-panel" aria-label="Dashboard features">
+      <div class="panel-heading">
+        <span class="eyebrow">WHAT YOU CAN EXPLORE</span>
+        <strong>One view of the possession game</strong>
+      </div>
+      <ul class="feature-list">
+        <li>
+          <span class="feature-number">01</span>
+          <span class="feature-copy">
+            <strong>Player landscape</strong>
+            <span>Map play frequency against scoring efficiency.</span>
+          </span>
+        </li>
+        <li>
+          <span class="feature-number">02</span>
+          <span class="feature-copy">
+            <strong>Player profiles</strong>
+            <span>Review every playtype in a table and radar view.</span>
+          </span>
+        </li>
+        <li>
+          <span class="feature-number">03</span>
+          <span class="feature-copy">
+            <strong>Side-by-side comparison</strong>
+            <span>Compare up to four players across seasons and actions.</span>
+          </span>
+        </li>
+      </ul>
+    </aside>
+  </main>
+
+  <footer>
+    <span>PLAYTYPE PLAYGROUND / NBA ANALYTICS</span>
+    <span>Data sourced from NBA Stats via nba_api</span>
+  </footer>
+</body>
+</html>
