@@ -1,6 +1,7 @@
 # Playtype Playground
 
 [Playtype Playground](https://playtype-playground.pages.dev/) is an interactive NBA analytics dashboard for exploring play-type volume and scoring efficiency. It supports player-level analysis across seasons, teams, positions, and offensive actions.
+<img width="1200" height="630" alt="PlaytypePlaygroundEmbedPreview" src="https://github.com/user-attachments/assets/68a82791-d87e-477c-87e8-667341c72a43" />
 
 ## Features
 
