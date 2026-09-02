@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import struct
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -21,10 +22,16 @@ class PublicAssetTests(unittest.TestCase):
             "privacy.html",
             "robots.txt",
             "sitemap.xml",
+            "social-preview.png",
             "social-preview.svg",
             "terms.html",
         }
         self.assertTrue(expected.issubset({path.name for path in WWW.iterdir()}))
+
+    def test_social_preview_uses_standard_link_card_dimensions(self) -> None:
+        source = (WWW / "social-preview.png").read_bytes()
+        self.assertEqual(source[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", source[16:24]), (1200, 630))
 
     def test_chart_binding_has_no_embedded_source_map_references(self) -> None:
         source = (WWW / "charts.js").read_text(encoding="utf-8")
