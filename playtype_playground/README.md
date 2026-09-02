@@ -50,8 +50,9 @@ Run the fetcher whenever you want a fresh cache:
 python playtype_playground\fetch_nba_data.py
 ```
 
-The command downloads PlayerIndex and SynergyPlayTypes results, combines traded-player
-stints, checks the columns and value ranges, then writes:
+The command downloads PlayerIndex and SynergyPlayTypes results, reads the public NBA
+game-log archive maintained by `llimllib/nba_data`, combines traded-player stints,
+checks the columns and value ranges, then writes:
 
 - `playtype_playground/data/nba_playtypes.csv`
 - `playtype_playground/data/nba_playtypes.meta.json`
@@ -61,6 +62,17 @@ Choose seasons explicitly when needed:
 ```powershell
 python playtype_playground\fetch_nba_data.py --seasons 2022-23 2023-24 2024-25
 ```
+
+To update only the position assignments in an existing cache:
+
+```powershell
+python playtype_playground\fetch_nba_data.py --positions-only
+```
+
+Each player-season is assigned the guard, forward, or center spot found most often in
+their regular-season game listings. At least 10 listings are required before that
+majority replaces the PlayerIndex roster label. This keeps seasons with incomplete
+game-log coverage on the official roster fallback.
 
 The normalized cache uses this contract:
 
@@ -72,7 +84,7 @@ Required columns:
 | `player_id` | `203999` | NBA player ID used for official headshots |
 | `player` | `Player Name` | Player display name |
 | `team` | `DEN` | Team abbreviation |
-| `position` | `G`, `F`, or `C` | Used by the position filter |
+| `position` | `G`, `F`, or `C` | Most common game listing, with roster label fallback |
 | `play_type` | `Isolation` | Must match a dashboard playtype label |
 | `possessions` | `182` | Integer sample size |
 | `frequency` | `0.184` | Fraction or percentage; values over 1 are divided by 100 |

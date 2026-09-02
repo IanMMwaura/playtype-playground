@@ -10,6 +10,7 @@ dependencies = [
     "pandas>=2.2,<4",
     "numpy>=2.0,<3",
     "nba_api>=1.11.4,<2",
+    "pyarrow>=18,<22",
 ]
 
 [project.optional-dependencies]

@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "playtype_playground"))
 
 from data_contract import REQUIRED_COLUMNS, validate_playtype_data  # noqa: E402
-from fetch_nba_data import normalize_synergy_frame  # noqa: E402
+from fetch_nba_data import game_position_map, normalize_synergy_frame  # noqa: E402
 
 
 def synergy_fixture() -> pd.DataFrame:
@@ -49,6 +49,47 @@ def synergy_fixture() -> pd.DataFrame:
 
 
 class NbaApiDataTests(unittest.TestCase):
+    def test_most_common_game_listing_sets_primary_position(self) -> None:
+        listings = pd.DataFrame(
+            [
+                *[
+                    {"gameId": f"0022500{game:03}", "personId": 7, "position": "G"}
+                    for game in range(7)
+                ],
+                *[
+                    {"gameId": f"0022501{game:03}", "personId": 7, "position": "F"}
+                    for game in range(4)
+                ],
+                {"gameId": "0012500001", "personId": 7, "position": "F"},
+            ]
+        )
+
+        self.assertEqual(game_position_map(listings), {7: "G"})
+
+    def test_sparse_game_listings_do_not_replace_roster_position(self) -> None:
+        listings = pd.DataFrame(
+            [
+                {"gameId": "0022500001", "personId": 7, "position": "G"},
+                {"gameId": "0022500002", "personId": 7, "position": "G"},
+            ]
+        )
+
+        self.assertEqual(game_position_map(listings), {})
+
+    def test_game_listing_overrides_hybrid_roster_label(self) -> None:
+        player_index = pd.DataFrame(
+            [{"PERSON_ID": 7, "TEAM_ABBREVIATION": "BBB", "POSITION": "F-G"}]
+        )
+        result = normalize_synergy_frame(
+            synergy_fixture(),
+            player_index,
+            season="2025-26",
+            play_type="Isolation",
+            player_positions={7: "G"},
+        )
+
+        self.assertEqual(result.iloc[0]["position"], "G")
+
     def test_traded_player_stints_are_consolidated(self) -> None:
         player_index = pd.DataFrame(
             [{"PERSON_ID": 7, "TEAM_ABBREVIATION": "BBB", "POSITION": "G-F"}]

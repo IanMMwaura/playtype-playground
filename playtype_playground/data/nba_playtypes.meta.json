@@ -1,9 +1,12 @@
 {
   "source": "NBA Stats via nba_api",
   "source_endpoint": "nba_api.stats.endpoints.SynergyPlayTypes",
-  "position_endpoint": "nba_api.stats.endpoints.PlayerIndex",
+  "position_source": "NBA game box scores compiled by llimllib/nba_data",
+  "position_source_url": "https://github.com/llimllib/nba_data",
+  "position_fallback_endpoint": "nba_api.stats.endpoints.PlayerIndex",
+  "position_method": "most common regular-season game position with at least 10 listings",
   "nba_api_version": "1.11.4",
-  "fetched_at_utc": "2026-08-29T05:19:06+00:00",
+  "fetched_at_utc": "2026-09-02T01:52:49+00:00",
   "season_type": "Regular Season",
   "seasons": [
     "2012-13",

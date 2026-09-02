@@ -50,6 +50,11 @@ SYNERGY_COLUMNS = {
     "FGA",
 }
 PLAYER_INDEX_COLUMNS = {"PERSON_ID", "POSITION"}
+GAME_POSITION_COLUMNS = {"gameId", "personId", "position"}
+GAME_POSITION_URL = (
+    "https://raw.githubusercontent.com/llimllib/nba_data/main/data/"
+    "playerlog_{season_end}.parquet"
+)
 
 T = TypeVar("T")
 
@@ -70,12 +75,72 @@ def _weighted_average(group: pd.DataFrame, column: str, weight: str) -> float:
     return float(values.mean())
 
 
+def game_position_map(
+    frame: pd.DataFrame,
+    *,
+    fallback: dict[int, str] | None = None,
+    minimum_listings: int = 10,
+) -> dict[int, str]:
+    """Choose each player's most common regular-season box-score position."""
+
+    if frame.empty:
+        return {}
+
+    _require_columns(frame, GAME_POSITION_COLUMNS, "player game logs")
+    positions = frame[["gameId", "personId", "position"]].copy()
+    positions["gameId"] = positions["gameId"].astype(str).str.zfill(10)
+    positions["position"] = positions["position"].map(normalize_position)
+    positions["personId"] = pd.to_numeric(positions["personId"], errors="coerce")
+    positions = positions[
+        positions["gameId"].str.startswith("002")
+        & positions["personId"].notna()
+        & positions["position"].notna()
+    ]
+    if positions.empty:
+        return {}
+
+    counts = (
+        positions.groupby(["personId", "position"], as_index=False)
+        .size()
+        .rename(columns={"size": "listings"})
+    )
+    totals = counts.groupby("personId")["listings"].transform("sum")
+    counts = counts[totals.ge(minimum_listings)]
+
+    result: dict[int, str] = {}
+    fallback = fallback or {}
+    for player_id, group in counts.groupby("personId", sort=False):
+        leaders = group[group["listings"].eq(group["listings"].max())]
+        fallback_position = fallback.get(int(player_id))
+        if fallback_position in set(leaders["position"]):
+            position = fallback_position
+        else:
+            position = str(leaders.sort_values("position").iloc[0]["position"])
+        result[int(player_id)] = position
+    return result
+
+
+def player_index_position_map(frame: pd.DataFrame) -> dict[int, str]:
+    """Build the fallback position map from NBA roster labels."""
+
+    _require_columns(frame, PLAYER_INDEX_COLUMNS, "PlayerIndex")
+    positions: dict[int, str] = {}
+    for row in frame[["PERSON_ID", "POSITION"]].drop_duplicates(
+        "PERSON_ID", keep="last"
+    ).itertuples(index=False):
+        position = normalize_position(row.POSITION)
+        if position is not None:
+            positions[int(row.PERSON_ID)] = position
+    return positions
+
+
 def normalize_synergy_frame(
     frame: pd.DataFrame,
     player_index_frame: pd.DataFrame,
     *,
     season: str,
     play_type: str,
+    player_positions: dict[int, str] | None = None,
 ) -> pd.DataFrame:
     """Turn one response into a single row per player and play type."""
 
@@ -86,12 +151,8 @@ def normalize_synergy_frame(
 
     positions = player_index_frame[["PERSON_ID", "POSITION"]].copy()
     positions = positions.rename(
-        columns={
-            "PERSON_ID": "PLAYER_ID",
-            "POSITION": "PLAYER_POSITION",
-        }
-    )
-    positions = positions.drop_duplicates("PLAYER_ID", keep="last")
+        columns={"PERSON_ID": "PLAYER_ID", "POSITION": "PLAYER_POSITION"}
+    ).drop_duplicates("PLAYER_ID", keep="last")
 
     source = frame.copy()
     source = source.merge(positions, how="left", on="PLAYER_ID", validate="many_to_one")
@@ -124,7 +185,13 @@ def normalize_synergy_frame(
         )
         team = "/".join(team_possessions.index)
         raw_position = group["PLAYER_POSITION"].dropna()
-        position = normalize_position(raw_position.iloc[0]) if not raw_position.empty else None
+        position = (player_positions or {}).get(int(player_id))
+        if position is None:
+            position = (
+                normalize_position(raw_position.iloc[0])
+                if not raw_position.empty
+                else None
+            )
         if position is None:
             continue
 
@@ -203,6 +270,15 @@ def fetch_dataset(
         index_frame = index_endpoint.player_index.get_data_frame()
         time.sleep(delay)
 
+        game_frame = _with_retries(
+            lambda: fetch_game_positions(season),
+            label=f"game positions {season}",
+            attempts=attempts,
+        )
+        positions = player_index_position_map(index_frame)
+        positions.update(game_position_map(game_frame, fallback=positions))
+        time.sleep(delay)
+
         for play_number, (label, parameter) in enumerate(
             PLAY_TYPE_PARAMETERS.items(), start=1
         ):
@@ -227,12 +303,64 @@ def fetch_dataset(
                     index_frame,
                     season=season,
                     play_type=label,
+                    player_positions=positions,
                 )
             )
             time.sleep(delay)
 
     dataset = pd.concat(collected, ignore_index=True)
     return validate_playtype_data(dataset, source="nba_api responses")
+
+
+def fetch_game_positions(season: str) -> pd.DataFrame:
+    """Read NBA box-score position listings from the public game-log archive."""
+
+    season_end = int(season.split("-")[0]) + 1
+    return pd.read_parquet(
+        GAME_POSITION_URL.format(season_end=season_end),
+        columns=sorted(GAME_POSITION_COLUMNS),
+    )
+
+
+def refresh_cached_positions(
+    dataset: pd.DataFrame,
+    seasons: Iterable[str],
+    *,
+    timeout: int = 45,
+    delay: float = 0.65,
+    attempts: int = 3,
+) -> pd.DataFrame:
+    """Replace cached roster labels with each player's largest position share."""
+
+    result = dataset.copy()
+    seasons = tuple(seasons)
+    for season_number, season in enumerate(seasons, start=1):
+        print(f"Game positions {season} ({season_number}/{len(seasons)})")
+        index_endpoint = _with_retries(
+            lambda: playerindex.PlayerIndex(
+                season=season,
+                historical_nullable="1",
+                timeout=timeout,
+            ),
+            label=f"PlayerIndex {season}",
+            attempts=attempts,
+        )
+        index_frame = index_endpoint.player_index.get_data_frame()
+        positions = player_index_position_map(index_frame)
+        game_frame = _with_retries(
+            lambda: fetch_game_positions(season),
+            label=f"game positions {season}",
+            attempts=attempts,
+        )
+        positions.update(game_position_map(game_frame, fallback=positions))
+        season_rows = result["season"].eq(season)
+        replacements = result.loc[season_rows, "player_id"].map(positions)
+        result.loc[season_rows, "position"] = replacements.fillna(
+            result.loc[season_rows, "position"]
+        )
+        time.sleep(delay)
+
+    return validate_playtype_data(result, source="refreshed position data")
 
 
 def write_cache(
@@ -251,7 +379,12 @@ def write_cache(
     metadata = {
         "source": "NBA Stats via nba_api",
         "source_endpoint": "nba_api.stats.endpoints.SynergyPlayTypes",
-        "position_endpoint": "nba_api.stats.endpoints.PlayerIndex",
+        "position_source": "NBA game box scores compiled by llimllib/nba_data",
+        "position_source_url": "https://github.com/llimllib/nba_data",
+        "position_fallback_endpoint": "nba_api.stats.endpoints.PlayerIndex",
+        "position_method": (
+            "most common regular-season game position with at least 10 listings"
+        ),
         "nba_api_version": importlib.metadata.version("nba_api"),
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "season_type": "Regular Season",
@@ -277,18 +410,38 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=45)
     parser.add_argument("--delay", type=float, default=0.65)
     parser.add_argument("--attempts", type=int, default=3)
+    parser.add_argument(
+        "--positions-only",
+        action="store_true",
+        help="Refresh positions in the existing CSV without downloading playtype data.",
+    )
     return parser
 
 
 def main() -> None:
     args = _parser().parse_args()
-    dataset = fetch_dataset(
-        args.seasons,
-        timeout=args.timeout,
-        delay=args.delay,
-        attempts=args.attempts,
-    )
-    cache = write_cache(dataset, output=args.output, seasons=args.seasons)
+    if args.positions_only:
+        dataset = validate_playtype_data(
+            pd.read_csv(args.output), source=str(args.output)
+        )
+        available_seasons = set(dataset["season"])
+        seasons = [season for season in args.seasons if season in available_seasons]
+        dataset = refresh_cached_positions(
+            dataset,
+            seasons,
+            timeout=args.timeout,
+            delay=args.delay,
+            attempts=args.attempts,
+        )
+    else:
+        seasons = args.seasons
+        dataset = fetch_dataset(
+            seasons,
+            timeout=args.timeout,
+            delay=args.delay,
+            attempts=args.attempts,
+        )
+    cache = write_cache(dataset, output=args.output, seasons=seasons)
     print(f"Wrote {len(dataset):,} player play-type rows to {cache}")
 
 
