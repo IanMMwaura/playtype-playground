@@ -37,8 +37,9 @@ shiny run --port 8765 playtype_playground\app.py
 - Swappable volume and efficiency axes
 - Optional league-average crosshair, player labels, and NBA headshots
 - Searchable player selection and comparison for up to four players
+- Shared comparison spans or a separate career-bound span for each selected player
 - Hover details for PPP, frequency, eFG%, turnover rate, and percentile
-- Player overview table, percentile radar, and season history
+- Player overview table, multi-season percentile radar, and season history
 - Sortable comparison, overview, and PPP leader tables
 - Shareable filter URLs plus CSV and PNG downloads
 

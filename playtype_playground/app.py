@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -31,6 +32,11 @@ COLORS = {
 }
 
 COMPARISON_COLORS = ("#007A33", "#8CA099", "#A8B4BF", "#718A78")
+RADAR_LAYER_COLORS = (
+    "#5DA5DA", "#F17CB0", "#60BD68", "#F15854", "#B276B2", "#FAA43A",
+    "#DECF3F", "#4DFFFF", "#FF6F61", "#A0CBE8", "#8CD17D", "#FF9D9A",
+    "#D4A6C8", "#B6992D",
+)
 TEAM_COLORS = {
     "ATL": "#E03A3E", "BOS": "#007A33", "BKN": "#000000", "NJN": "#000000",
     "CHA": "#1D1160", "CHH": "#1D1160", "CHI": "#CE1141", "CLE": "#860038",
@@ -234,19 +240,83 @@ def player_team_color(frame: pd.DataFrame, player: str, fallback: str) -> str:
     return team_color_for(identity["team"], fallback)
 
 
-def comparison_series_colors(frame: pd.DataFrame, players: list[str]) -> dict[str, str]:
+def seasons_in_span(
+    start: object,
+    end: object,
+    available: list[str] | None = None,
+) -> list[str]:
+    """Return available seasons between two endpoints in chronological order."""
+
+    chronological = list(reversed(SEASONS))
+    allowed = set(available or chronological)
+    start_value = str(start) if str(start) in chronological else chronological[0]
+    end_value = str(end) if str(end) in chronological else chronological[-1]
+    low, high = sorted((chronological.index(start_value), chronological.index(end_value)))
+    return [season for season in chronological[low : high + 1] if season in allowed]
+
+
+def season_span_label(seasons: list[str]) -> str:
+    if not seasons:
+        return "No seasons"
+    return seasons[0] if len(seasons) == 1 else f"{seasons[0]}–{seasons[-1]}"
+
+
+def aggregate_profile(frame: pd.DataFrame) -> pd.DataFrame:
+    """Combine multiple seasons into one possession-weighted playtype profile."""
+
+    if frame.empty:
+        return frame.copy()
+    rows: list[dict[str, object]] = []
+    weighted_columns = (
+        "frequency",
+        "ppp",
+        "efg_pct",
+        "tov_pct",
+        "score_pct",
+        "percentile",
+    )
+    for play_type, group in frame.groupby("play_type", sort=False):
+        row: dict[str, object] = {
+            "play_type": play_type,
+            "possessions": int(group["possessions"].sum()),
+        }
+        for column in weighted_columns:
+            row[column] = weighted_average(group, column)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def comparison_series_colors(
+    frame: pd.DataFrame,
+    entries: list[dict[str, object]],
+) -> dict[str, str]:
     team_counts: dict[str, int] = {}
     colors: dict[str, str] = {}
-    for index, player in enumerate(players):
-        rows = frame[frame["player"] == player]
+    for index, entry in enumerate(entries):
+        key = str(entry["key"])
+        player = str(entry["player"])
+        seasons = {str(season) for season in entry["seasons"]}
+        rows = frame[
+            (frame["player"] == player)
+            & (frame["season"].astype(str).isin(seasons))
+        ]
         if rows.empty:
-            colors[player] = COMPARISON_COLORS[index % len(COMPARISON_COLORS)]
+            colors[key] = COMPARISON_COLORS[index % len(COMPARISON_COLORS)]
             continue
-        identity = rows.sort_values("possessions", ascending=False).iloc[0]
+        identity = rows.sort_values(["season", "possessions"], ascending=False).iloc[0]
         team = str(identity["team"]).split("/")[0]
         palette = TEAM_COLOR_PALETTES.get(team, (team_color_for(team),))
         palette_index = team_counts.get(team, 0)
-        colors[player] = palette[palette_index % len(palette)]
+        candidates = [
+            *palette[palette_index:],
+            *palette[:palette_index],
+            *COMPARISON_COLORS,
+        ]
+        color = next(
+            (candidate for candidate in candidates if candidate not in colors.values()),
+            candidates[index % len(candidates)],
+        )
+        colors[key] = color
         team_counts[team] = palette_index + 1
     return colors
 
@@ -404,7 +474,7 @@ page_metadata = ui.head_content(
     ),
     ui.tags.script(src="/charts.js?v=20260831-2", defer=""),
     *(
-        [ui.tags.script(src="/body-layout.js?v=20260901-2", defer="")]
+        [ui.tags.script(src="/body-layout.js?v=20260902-3", defer="")]
         if BODY_CONTROLS
         else []
     ),
@@ -470,6 +540,28 @@ sidebar = ui.sidebar(
             "maxOptions": len(PLAYER_CHOICES),
             "openOnFocus": True,
         },
+    ),
+    ui.input_select(
+        "comparison_season_mode",
+        "Seasons",
+        {
+            "all": "All seasons",
+            "individual": "Choose a season span for each choice",
+            "shared": "Choose same season(s) for all choices",
+        },
+        selected="shared",
+    ),
+    ui.input_select(
+        "comparison_start",
+        "Start year",
+        list(reversed(SEASONS)),
+        selected=SEASONS[0],
+    ),
+    ui.input_select(
+        "comparison_end",
+        "End year",
+        list(reversed(SEASONS)),
+        selected=SEASONS[0],
     ),
     ui.input_selectize(
         "compare_players",
@@ -619,6 +711,36 @@ app_ui = ui.page_sidebar(
                     ui.output_ui("overview_heading"),
                     class_="card-heading",
                 ),
+                ui.div(
+                    ui.input_select(
+                        "overview_season_mode",
+                        "Seasons",
+                        {
+                            "single": "Single season",
+                            "all": "All seasons",
+                            "span": "Choose a season span",
+                        },
+                        selected="single",
+                    ),
+                    ui.input_select(
+                        "radar_start",
+                        "Start year",
+                        list(reversed(SEASONS)),
+                        selected=SEASONS[0],
+                    ),
+                    ui.input_select(
+                        "radar_end",
+                        "End year",
+                        list(reversed(SEASONS)),
+                        selected=SEASONS[0],
+                    ),
+                    ui.input_switch(
+                        "overview_layer_seasons",
+                        "Layer seasons on radar",
+                        value=False,
+                    ),
+                    class_="radar-season-controls",
+                ),
                 ui.tags.button(
                     "Save PNG",
                     type="button",
@@ -691,6 +813,7 @@ app_ui = ui.page_sidebar(
                 class_="split-header",
             ),
             ui.output_ui("comparison_matrix"),
+            ui.output_ui("comparison_season_selectors"),
             plot_output(
                 "profile_plot",
                 height=380,
@@ -759,6 +882,8 @@ app_ui = ui.page_sidebar(
 
 def server(input, output, session):
     selected_player = reactive.Value(None)
+    comparison_shared_sync_cache: dict[str, object] = {"signature": None}
+    comparison_individual_sync_cache: dict[str, tuple[object, ...]] = {}
 
     @reactive.calc
     def available_player_names() -> list[str]:
@@ -810,29 +935,169 @@ def server(input, output, session):
         frame["playtype_order"] = frame["play_type"].map(order)
         return frame.sort_values("playtype_order", ignore_index=True)
 
+    def player_seasons(player: str) -> list[str]:
+        seasons = playtype_data.loc[
+            playtype_data["player"].astype(str).eq(player), "season"
+        ].astype(str)
+        return [season for season in reversed(SEASONS) if season in set(seasons)]
+
     @reactive.calc
-    def comparison_names() -> list[str]:
+    def overview_seasons() -> list[str]:
+        player = selected_player.get()
+        available = player_seasons(str(player)) if player else []
+        if input.overview_season_mode() == "single":
+            season = str(input.season())
+            return [season] if season in available else []
+        if input.overview_season_mode() == "all":
+            return available
+        return seasons_in_span(
+            input.radar_start(),
+            input.radar_end(),
+            available,
+        )
+
+    @reactive.calc
+    def overview_profile() -> pd.DataFrame:
+        player = selected_player.get()
+        if not player:
+            return playtype_data.iloc[0:0].copy()
+        frame = playtype_data[
+            (playtype_data["player"].astype(str) == str(player))
+            & (playtype_data["season"].astype(str).isin(overview_seasons()))
+        ]
+        profile = aggregate_profile(frame)
+        if profile.empty:
+            return profile
+        order = {play_type: index for index, play_type in enumerate(PLAY_TYPES)}
+        profile["playtype_order"] = profile["play_type"].map(order)
+        return profile.sort_values("playtype_order", ignore_index=True)
+
+    @reactive.calc
+    def overview_row() -> pd.Series | None:
+        profile = overview_profile()
+        row = profile[profile["play_type"] == input.play_type()]
+        return None if row.empty else row.iloc[0]
+
+    @reactive.calc
+    def overview_identity() -> pd.Series | None:
+        player = selected_player.get()
+        frame = playtype_data[
+            (playtype_data["player"].astype(str) == str(player))
+            & (playtype_data["season"].astype(str).isin(overview_seasons()))
+        ]
+        if frame.empty:
+            return None
+        return frame.sort_values(["season", "possessions"], ascending=False).iloc[0]
+
+    def entry_profile(entry: dict[str, object]) -> pd.DataFrame:
+        frame = playtype_data[
+            (playtype_data["player"].astype(str) == str(entry["player"]))
+            & (playtype_data["season"].astype(str).isin(entry["seasons"]))
+        ]
+        return aggregate_profile(frame)
+
+    @reactive.calc
+    def comparison_players() -> list[str]:
         raw = input.compare_players() or []
         if isinstance(raw, str):
             raw = [raw]
-        names: list[str] = []
-        available = set(available_player_names())
-        for name in raw:
-            value = str(name)
-            if value in available and value not in names:
-                names.append(value)
-        names = names[:4]
+        players: list[str] = []
+        for item in raw:
+            value = str(item)
+            player = value.rsplit("|||", 1)[0] if "|||" in value else value
+            if player in PLAYER_CHOICES and player not in players:
+                players.append(player)
+        return players[:4]
+
+    def comparison_span_input_ids(player: str) -> tuple[str, str]:
+        slug = re.sub(r"[^a-z0-9]+", "_", player.lower()).strip("_")
+        return f"comparison_start_{slug}", f"comparison_end_{slug}"
+
+    @reactive.calc
+    def comparison_entries() -> list[dict[str, object]]:
+        entries: list[dict[str, object]] = []
+        mode = str(input.comparison_season_mode() or "shared")
+        shared_seasons = seasons_in_span(
+            input.comparison_start(),
+            input.comparison_end(),
+        )
+        for player in comparison_players():
+            if mode == "individual":
+                available = player_seasons(player)
+                start_id, end_id = comparison_span_input_ids(player)
+                fallback = str(input.season()) if str(input.season()) in available else available[-1]
+                try:
+                    start_value = input[start_id]()
+                    end_value = input[end_id]()
+                except Exception:
+                    start_value = fallback
+                    end_value = fallback
+                start, end, _, _ = bounded_season_span(
+                    available,
+                    start_value,
+                    end_value,
+                    fallback,
+                )
+                seasons = seasons_in_span(start, end, available)
+                entry = {
+                    "key": f"{player}|||{start}|||{end}",
+                    "player": player,
+                    "seasons": seasons,
+                    "label": f"{player} · {season_span_label(seasons)}",
+                }
+            elif mode == "all":
+                seasons = player_seasons(player)
+                if not seasons:
+                    continue
+                entry = {
+                    "key": player,
+                    "player": player,
+                    "seasons": seasons,
+                    "label": f"{player} · All seasons",
+                }
+            else:
+                seasons = [season for season in shared_seasons if season in player_seasons(player)]
+                if not seasons:
+                    continue
+                entry = {
+                    "key": player,
+                    "player": player,
+                    "seasons": seasons,
+                    "label": player,
+                }
+            if str(entry["key"]) not in {str(existing["key"]) for existing in entries}:
+                entries.append(entry)
+        entries = entries[:4]
         sort_key = str(input.comparison_sort() or "")
-        if sort_key in {key for key, _ in COMPARISON_STATS} and len(names) > 1:
-            current = playtype_data[
-                (playtype_data["season"].astype(str) == str(input.season()))
-                & (playtype_data["play_type"] == input.play_type())
-            ].set_index("player")
-            names.sort(
-                key=lambda name: float(current.at[name, sort_key]) if name in current.index else float("-inf"),
+        if sort_key in {key for key, _ in COMPARISON_STATS} and len(entries) > 1:
+            def sort_value(entry: dict[str, object]) -> float:
+                profile = entry_profile(entry)
+                row = profile[profile["play_type"] == input.play_type()]
+                return float(row.iloc[0][sort_key]) if not row.empty else float("-inf")
+
+            entries.sort(
+                key=sort_value,
                 reverse=sort_key != "tov_pct",
             )
-        return names
+        return entries
+
+    def bounded_season_span(
+        available: list[str],
+        current_start: object,
+        current_end: object,
+        fallback: str,
+    ) -> tuple[str, str, list[str], list[str]]:
+        if not available:
+            available = [fallback]
+        start = str(current_start or "")
+        end = str(current_end or "")
+        start = start if start in available else fallback
+        end = end if end in available else fallback
+        if available.index(start) > available.index(end):
+            end = start
+        start_choices = available[: available.index(end) + 1]
+        end_choices = available[available.index(start) :]
+        return start, end, start_choices, end_choices
 
     @reactive.effect
     @reactive.event(input.season, input.play_type)
@@ -857,26 +1122,125 @@ def server(input, output, session):
         available = set(names)
         highlighted = str(input.highlight() or "").strip()
         highlighted = highlighted if highlighted in available else ""
-        raw_comparisons = input.compare_players() or []
-        if isinstance(raw_comparisons, str):
-            raw_comparisons = [raw_comparisons]
-        comparisons = [
-            str(name) for name in raw_comparisons if str(name) in available
-        ][:4]
         ui.update_selectize(
             "highlight",
             choices={"": "", **{name: name for name in names}},
             selected=highlighted,
             session=session,
         )
-        ui.update_selectize(
-            "compare_players",
-            choices=names,
-            selected=comparisons,
-            session=session,
-        )
         if not highlighted:
             selected_player.set(None)
+
+    @reactive.effect
+    def _sync_radar_season_choices():
+        player = selected_player.get()
+        available = player_seasons(str(player)) if player else [str(input.season())]
+        fallback = str(input.season()) if str(input.season()) in available else available[-1]
+        start, end, start_choices, end_choices = bounded_season_span(
+            available,
+            input.radar_start(),
+            input.radar_end(),
+            fallback,
+        )
+        ui.update_select("radar_start", choices=start_choices, selected=start, session=session)
+        ui.update_select("radar_end", choices=end_choices, selected=end, session=session)
+
+    @reactive.effect
+    def _sync_comparison_choices():
+        selected_players = comparison_players()
+        mode = str(input.comparison_season_mode() or "shared")
+        if mode in {"individual", "all"}:
+            comparison_shared_sync_cache["signature"] = None
+            return
+
+        common_seasons = set(SEASONS)
+        for player in selected_players:
+            common_seasons &= set(player_seasons(player))
+        available_seasons = [
+            season for season in reversed(SEASONS) if season in common_seasons
+        ]
+        if not available_seasons:
+            available_seasons = [str(input.season())]
+
+        fallback = (
+            str(input.season())
+            if str(input.season()) in available_seasons
+            else available_seasons[-1]
+        )
+        start, end, start_choices, end_choices = bounded_season_span(
+            available_seasons,
+            input.comparison_start(),
+            input.comparison_end(),
+            fallback,
+        )
+        signature = (
+            tuple(selected_players),
+            tuple(available_seasons),
+            start,
+            end,
+            tuple(start_choices),
+            tuple(end_choices),
+        )
+        if comparison_shared_sync_cache["signature"] == signature:
+            return
+        comparison_shared_sync_cache["signature"] = signature
+        ui.update_select(
+            "comparison_start",
+            choices=start_choices,
+            selected=start,
+            session=session,
+        )
+        ui.update_select(
+            "comparison_end",
+            choices=end_choices,
+            selected=end,
+            session=session,
+        )
+
+    @reactive.effect
+    def _sync_individual_comparison_spans():
+        if input.comparison_season_mode() != "individual":
+            comparison_individual_sync_cache.clear()
+            return
+        for player in comparison_players():
+            available = player_seasons(player)
+            if not available:
+                continue
+            start_id, end_id = comparison_span_input_ids(player)
+            try:
+                start_value = input[start_id]()
+                end_value = input[end_id]()
+            except Exception:
+                continue
+            fallback = str(input.season()) if str(input.season()) in available else available[-1]
+            start, end, start_choices, end_choices = bounded_season_span(
+                available,
+                start_value,
+                end_value,
+                fallback,
+            )
+            signature = (
+                tuple(available),
+                start,
+                end,
+                tuple(start_choices),
+                tuple(end_choices),
+            )
+            if comparison_individual_sync_cache.get(player) == signature:
+                continue
+            comparison_individual_sync_cache[player] = signature
+            ui.update_select(
+                start_id,
+                choices=start_choices,
+                selected=start,
+                session=session,
+            )
+            ui.update_select(
+                end_id,
+                choices=end_choices,
+                selected=end,
+                session=session,
+            )
 
     @reactive.effect
     def _sync_selected_player():
@@ -906,6 +1270,13 @@ def server(input, output, session):
         ui.update_switch("headshots", value=True)
         ui.update_select("label_mode", selected="highlight")
         ui.update_select("trend_metric", selected="ppp")
+        ui.update_select("overview_season_mode", selected="single")
+        ui.update_select("radar_start", selected=SEASONS[0])
+        ui.update_select("radar_end", selected=SEASONS[0])
+        ui.update_switch("overview_layer_seasons", value=False)
+        ui.update_select("comparison_season_mode", selected="shared")
+        ui.update_select("comparison_start", selected=SEASONS[0])
+        ui.update_select("comparison_end", selected=SEASONS[0])
         ui.update_text("comparison_sort", value="")
         ui.update_selectize("highlight", selected="")
         ui.update_selectize(
@@ -1202,22 +1573,22 @@ def server(input, output, session):
         player = selected_player.get()
         if not player:
             return ui.tags.h2("Select a player to view their profile")
-        profile = selected_profile()
-        if profile.empty:
-            return ui.tags.h2(f"{player} has no data for {input.season()}")
-        identity = profile.sort_values("possessions", ascending=False).iloc[0]
+        identity = overview_identity()
+        if identity is None:
+            return ui.tags.h2(f"{player} has no data for the selected seasons")
+        seasons = overview_seasons()
         return ui.div(
             headshot_tag(
                 identity["player_id"],
                 str(player),
                 class_name="overview-headshot",
-                season=input.season(),
+                season=identity["season"],
                 team=identity["team"],
             ),
             ui.div(
                 ui.tags.h2(str(player)),
                 ui.tags.span(
-                    f'{identity["team"]} · {identity["position"]} · {input.season()}',
+                    f'{identity["team"]} · {identity["position"]} · {season_span_label(seasons)}',
                     class_="overview-meta",
                 ),
             ),
@@ -1226,14 +1597,14 @@ def server(input, output, session):
 
     @render.ui
     def player_insights():
-        profile = selected_profile()
-        row = selected_row()
+        profile = overview_profile()
+        row = overview_row()
         if profile.empty or row is None:
             return None
         best = profile.sort_values(["percentile", "possessions"], ascending=False).iloc[0]
         volume = profile.sort_values("possessions", ascending=False).iloc[0]
         league_frame = playtype_data[
-            (playtype_data["season"].astype(str) == str(input.season()))
+            (playtype_data["season"].astype(str).isin(overview_seasons()))
             & (playtype_data["play_type"] == input.play_type())
         ]
         league_ppp = weighted_average(league_frame, "ppp")
@@ -1254,7 +1625,6 @@ def server(input, output, session):
             ui.div(
                 ui.tags.span("VS LEAGUE AVERAGE"),
                 ui.tags.strong(f'{difference:+.3f} PPP'),
-                ui.tags.small("versus league average"),
                 class_="insight-item",
             ),
             class_="player-insights",
@@ -1262,7 +1632,7 @@ def server(input, output, session):
 
     @render.ui
     def overview_table():
-        profile = selected_profile()
+        profile = overview_profile()
         if profile.empty:
             return ui.div(
                 "Search for a player or click a point on the chart.",
@@ -1305,10 +1675,15 @@ def server(input, output, session):
 
     @render_plotly_json
     def overview_radar():
-        profile = selected_profile()
+        player = selected_player.get()
+        selected_seasons = overview_seasons()
+        radar_frame = playtype_data[
+            (playtype_data["player"].astype(str) == str(player))
+            & (playtype_data["season"].astype(str).isin(selected_seasons))
+        ].copy()
         light_mode = input.color_mode() == "light"
         fig = go.Figure()
-        if profile.empty:
+        if radar_frame.empty:
             fig.add_annotation(
                 text="Select a player",
                 x=0.5,
@@ -1321,37 +1696,70 @@ def server(input, output, session):
             fig.update_layout(**_chart_layout(height=390, light_mode=light_mode))
             return plot_payload(fig, label="No player selected for the playtype radar")
 
-        identity = profile.sort_values("possessions", ascending=False).iloc[0]
-        color = team_color_for(identity["team"])
-        theta = profile["play_type"].astype(str).tolist()
-        radii = profile["percentile"].astype(float).tolist()
-        custom = profile[["ppp", "possessions", "frequency"]].to_numpy().tolist()
-        theta.append(theta[0])
-        radii.append(radii[0])
-        custom.append(custom[0])
-        fig.add_trace(
-            go.Scatterpolar(
-                r=radii,
-                theta=theta,
-                customdata=custom,
-                mode="lines+markers",
-                fill="toself",
-                line={"color": color, "width": 2},
-                marker={"color": color, "size": 6},
-                fillcolor=color_with_alpha(color, 0.18),
-                hovertemplate=(
-                    "<b>%{theta}</b><br>Percentile %{r:.0f}<br>"
-                    "PPP %{customdata[0]:.3f}<br>Possessions %{customdata[1]:,.0f}<br>"
-                    "Frequency %{customdata[2]:.1%}<extra></extra>"
-                ),
-                showlegend=False,
+        playtype_order = {play_type: index for index, play_type in enumerate(PLAY_TYPES)}
+        layered = bool(input.overview_layer_seasons()) and len(selected_seasons) > 1
+        series: list[tuple[str, pd.DataFrame, str]] = []
+        if layered:
+            for season in selected_seasons:
+                season_frame = radar_frame[radar_frame["season"].astype(str) == season]
+                identity = season_frame.sort_values("possessions", ascending=False).iloc[0]
+                series.append((season, aggregate_profile(season_frame), str(identity["team"])))
+        else:
+            identity = radar_frame.sort_values(["season", "possessions"], ascending=False).iloc[0]
+            label = (
+                "All seasons"
+                if input.overview_season_mode() == "all"
+                else season_span_label(selected_seasons)
             )
-        )
+            series.append((label, aggregate_profile(radar_frame), str(identity["team"])))
+
+        for index, (label, profile, team_value) in enumerate(series):
+            profile = profile.copy()
+            profile["playtype_order"] = profile["play_type"].map(playtype_order)
+            profile = profile.sort_values("playtype_order")
+            team = team_value.split("/")[0]
+            palette = TEAM_COLOR_PALETTES.get(team, COMPARISON_COLORS)
+            color = (
+                RADAR_LAYER_COLORS[index % len(RADAR_LAYER_COLORS)]
+                if layered
+                else palette[0]
+            )
+            theta = profile["play_type"].astype(str).tolist()
+            radii = profile["percentile"].astype(float).tolist()
+            custom = profile[["ppp", "possessions", "frequency"]].to_numpy().tolist()
+            theta.append(theta[0])
+            radii.append(radii[0])
+            custom.append(custom[0])
+            fig.add_trace(
+                go.Scatterpolar(
+                    r=radii,
+                    theta=theta,
+                    customdata=custom,
+                    mode="lines+markers",
+                    fill=None if layered else "toself",
+                    line={"color": color, "width": 2},
+                    marker={"color": color, "size": 6},
+                    fillcolor=color_with_alpha(color, 0.18),
+                    name=label,
+                    hovertemplate=(
+                        f"<b>{label} · %{{theta}}</b><br>Percentile %{{r:.0f}}<br>"
+                        "PPP %{customdata[0]:.3f}<br>Possessions %{customdata[1]:,.0f}<br>"
+                        "Frequency %{customdata[2]:.1%}<extra></extra>"
+                    ),
+                    showlegend=layered,
+                )
+            )
         radar_layout = _chart_layout(height=390, light_mode=light_mode)
-        radar_layout["margin"] = {"l": 55, "r": 55, "t": 35, "b": 35}
+        radar_layout["margin"] = {
+            "l": 55,
+            "r": 55,
+            "t": 20 if layered else 35,
+            "b": 95 if layered else 35,
+        }
         fig.update_layout(
             **radar_layout,
             polar={
+                "domain": {"y": [0.18, 1]} if layered else {"y": [0, 1]},
                 "bgcolor": "rgba(0,0,0,0)",
                 "radialaxis": {
                     "range": [0, 100],
@@ -1364,10 +1772,20 @@ def server(input, output, session):
                     "linecolor": "rgba(0,0,0,0)",
                 },
             },
+            legend={
+                "orientation": "h",
+                "x": 0.5,
+                "xanchor": "center",
+                "y": -0.08,
+                "yanchor": "top",
+                "font": {"size": 9},
+                "entrywidth": 68,
+                "entrywidthmode": "pixels",
+            },
         )
         return plot_payload(
             fig,
-            label=f"{selected_player.get()} playtype percentile radar for {input.season()}",
+            label=f"{player} playtype percentile radar for {season_span_label(selected_seasons)}",
         )
 
     @render.ui
@@ -1426,65 +1844,138 @@ def server(input, output, session):
 
     @render.ui
     def comparison_context():
+        entries = comparison_entries()
+        seasons = sorted(
+            {str(season) for entry in entries for season in entry["seasons"]},
+            key=lambda season: list(reversed(SEASONS)).index(season),
+        )
+        if not seasons:
+            seasons = seasons_in_span(input.comparison_start(), input.comparison_end())
+        season_label = season_span_label(seasons)
+        mode_labels = {
+            "all": "all player seasons",
+            "individual": "individual player spans",
+            "shared": "shared season span",
+        }
+        mode = mode_labels.get(str(input.comparison_season_mode()), "shared season span")
         return ui.tags.span(
-            f"{input.season()} · {input.play_type()} selected · "
+            f"{season_label} · {mode} · {input.play_type()} selected · "
             "Points per possession (PPP) across play types",
             class_="metric-caption",
         )
 
     @render.ui
+    def comparison_season_selectors():
+        if input.comparison_season_mode() != "individual":
+            return None
+        players = comparison_players()
+        if not players:
+            return ui.div(
+                "Choose players above, then set a season span for each one.",
+                class_="comparison-season-note",
+            )
+
+        controls: list[object] = []
+        for player in players:
+            available = player_seasons(player)
+            start_id, end_id = comparison_span_input_ids(player)
+            fallback = str(input.season()) if str(input.season()) in available else available[-1]
+            try:
+                with reactive.isolate():
+                    current_start = input[start_id]()
+                    current_end = input[end_id]()
+            except Exception:
+                current_start = fallback
+                current_end = fallback
+            start, end, start_choices, end_choices = bounded_season_span(
+                available,
+                current_start,
+                current_end,
+                fallback,
+            )
+            controls.append(
+                ui.div(
+                    ui.tags.span(player, class_="comparison-player-season-name"),
+                    ui.div(
+                        ui.input_select(
+                            start_id,
+                            "Start year",
+                            start_choices,
+                            selected=start,
+                        ),
+                        ui.input_select(
+                            end_id,
+                            "End year",
+                            end_choices,
+                            selected=end,
+                        ),
+                        class_="comparison-player-season-fields",
+                    ),
+                    class_="comparison-player-season",
+                )
+            )
+        return ui.div(
+            ui.div(*controls, class_="comparison-season-grid"),
+            ui.tags.span(
+                "Each player is compared across the full span selected here.",
+                class_="comparison-season-note",
+            ),
+            class_="comparison-season-selectors",
+        )
+
+    @render.ui
     def comparison_legend():
         items: list[object] = []
-        season_frame = playtype_data[
-            playtype_data["season"].astype(str) == str(input.season())
-        ]
-        series_colors = comparison_series_colors(season_frame, comparison_names())
-        for index, name in enumerate(comparison_names()):
-            color = series_colors[name]
+        entries = comparison_entries()
+        series_colors = comparison_series_colors(playtype_data, entries)
+        for entry in entries:
+            key = str(entry["key"])
+            color = series_colors[key]
             items.extend(
                 [
                     ui.tags.span(
                         class_="compare-swatch",
                         style=f"background:{color}",
                     ),
-                    ui.tags.span(name),
+                    ui.tags.span(str(entry["label"])),
                 ]
             )
-        items.extend(
-            [
-                ui.tags.span(class_="compare-tick"),
-                ui.tags.span("League avg"),
-            ]
-        )
         return ui.div(*items, class_="comparison-legend")
 
     @render.ui
     def comparison_matrix():
-        names = comparison_names()
-        if not names:
+        entries = comparison_entries()
+        if not entries:
             return ui.div(
                 "Search and add up to four players.",
                 class_="comparison-empty",
             )
 
-        season_frame = playtype_data[
-            playtype_data["season"].astype(str) == str(input.season())
-        ]
-        current_frame = season_frame[season_frame["play_type"] == input.play_type()]
-        current_rows = {
-            str(row["player"]): row
-            for _, row in current_frame[current_frame["player"].isin(names)].iterrows()
-        }
-        series_colors = comparison_series_colors(season_frame, names)
+        profiles = {str(entry["key"]): entry_profile(entry) for entry in entries}
+        current_rows = {}
+        for key, profile in profiles.items():
+            row = profile[profile["play_type"] == input.play_type()]
+            if not row.empty:
+                current_rows[key] = row.iloc[0]
+        series_colors = comparison_series_colors(playtype_data, entries)
 
         headers = [ui.tags.th("STAT", class_="comparison-metric-heading")]
-        for index, name in enumerate(names):
-            player_rows = season_frame[season_frame["player"] == name]
+        for entry in entries:
+            key = str(entry["key"])
+            name = str(entry["player"])
+            seasons = [str(season) for season in entry["seasons"]]
+            player_rows = playtype_data[
+                (playtype_data["player"] == name)
+                & (playtype_data["season"].astype(str).isin(seasons))
+            ]
             if player_rows.empty:
-                headers.append(ui.tags.th(name))
+                headers.append(ui.tags.th(str(entry["label"])))
                 continue
-            identity = player_rows.sort_values("possessions", ascending=False).iloc[0]
-            color = series_colors[name]
+            identity = player_rows.sort_values(
+                ["season", "possessions"], ascending=False
+            ).iloc[0]
+            color = series_colors[key]
+            season_label = seasons[0] if len(seasons) == 1 else f"{seasons[0]}–{seasons[-1]}"
             headers.append(
                 ui.tags.th(
                     ui.div(
@@ -1492,12 +1983,12 @@ def server(input, output, session):
                             identity["player_id"],
                             name,
                             class_name="comparison-headshot",
-                            season=input.season(),
+                            season=identity["season"],
                             team=identity["team"],
                         ),
                         ui.div(
                             ui.tags.strong(name),
-                            ui.tags.span(str(identity["team"])),
+                            ui.tags.span(f'{identity["team"]} · {season_label}'),
                             class_="comparison-player-copy",
                         ),
                         class_="comparison-player-heading",
@@ -1509,9 +2000,10 @@ def server(input, output, session):
         body_rows = []
         for key, label in COMPARISON_STATS:
             values = {
-                name: float(current_rows[name][key])
-                for name in names
-                if name in current_rows and pd.notna(current_rows[name][key])
+                str(entry["key"]): float(current_rows[str(entry["key"])][key])
+                for entry in entries
+                if str(entry["key"]) in current_rows
+                and pd.notna(current_rows[str(entry["key"])][key])
             }
             highest = max(values.values()) if values else None
             cells = [
@@ -1526,8 +2018,8 @@ def server(input, output, session):
                     scope="row",
                 )
             ]
-            for name in names:
-                value = values.get(name)
+            for entry in entries:
+                value = values.get(str(entry["key"]))
                 is_highest = (
                     value is not None
                     and highest is not None
@@ -1549,48 +2041,49 @@ def server(input, output, session):
             ui.tags.table(
                 ui.tags.thead(ui.tags.tr(*headers)),
                 ui.tags.tbody(*body_rows),
-                class_=f"comparison-table comparison-count-{len(names)}",
+                class_=f"comparison-table comparison-count-{len(entries)}",
             ),
             class_="comparison-table-wrap",
         )
 
     @render_plotly_json
     def profile_plot():
-        season_frame = playtype_data[playtype_data["season"].astype(str) == str(input.season())]
-        names = comparison_names()
+        entries = comparison_entries()
         light_mode = input.color_mode() == "light"
-
-        league = (
-            season_frame.groupby("play_type", sort=False)
-            .apply(lambda group: weighted_average(group, "ppp"), include_groups=False)
-            .reindex(PLAY_TYPES)
-        )
-        order = list(PLAY_TYPES)[::-1]
         fig = go.Figure()
-        series_colors = comparison_series_colors(season_frame, names)
-        for index, name in enumerate(names):
-            profile = season_frame[season_frame["player"] == name].set_index("play_type")
-            color = series_colors[name]
+        if not entries:
+            fig.add_annotation(
+                text="Choose at least one player to build the comparison.",
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font={"size": 14, "color": "#5B6D62" if light_mode else COLORS["muted"]},
+            )
+            fig.update_layout(
+                **_chart_layout(height=380, light_mode=light_mode),
+                xaxis={"visible": False},
+                yaxis={"visible": False},
+            )
+            return plot_payload(fig, label="No players selected for comparison")
+
+        order = list(PLAY_TYPES)
+        series_colors = comparison_series_colors(playtype_data, entries)
+        for entry in entries:
+            key = str(entry["key"])
+            label = str(entry["label"])
+            profile = entry_profile(entry).set_index("play_type")
+            color = series_colors[key]
             fig.add_trace(
                 go.Bar(
-                    y=order,
-                    x=profile.reindex(order)["ppp"],
-                    orientation="h",
-                    name=name,
+                    x=order,
+                    y=profile.reindex(order)["ppp"],
+                    name=label,
                     marker={"color": color, "line": {"width": 0}},
-                    hovertemplate=f"<b>{name}</b><br>%{{y}} · %{{x:.3f}} PPP<extra></extra>",
+                    hovertemplate=f"<b>{label}</b><br>%{{x}} · %{{y:.3f}} PPP<extra></extra>",
                 )
             )
-        fig.add_trace(
-            go.Scatter(
-                y=order,
-                x=league.reindex(order),
-                mode="markers",
-                name="League average",
-                marker={"color": "#E8EEF5", "size": 7, "symbol": "line-ns", "line": {"width": 2}},
-                hovertemplate="<b>League average</b><br>%{y} · %{x:.3f} PPP<extra></extra>",
-            )
-        )
         fig.update_layout(
             **_chart_layout(height=380, light_mode=light_mode),
             barmode="group",
@@ -1598,16 +2091,22 @@ def server(input, output, session):
             bargroupgap=0.05,
             showlegend=False,
             xaxis={
+                "title": None,
+                "gridcolor": "rgba(0,0,0,0)",
+                "tickangle": -28,
+                "automargin": True,
+            },
+            yaxis={
                 "title": "POINTS PER POSSESSION",
                 "tickformat": ".2f",
                 "gridcolor": "rgba(44,70,55,.12)" if light_mode else COLORS["grid"],
                 "zeroline": False,
             },
-            yaxis={"title": None, "gridcolor": "rgba(0,0,0,0)", "automargin": True},
         )
+        labels = [str(entry["label"]) for entry in entries]
         return plot_payload(
             fig,
-            label=f"Playtype efficiency comparison for {', '.join(names)}",
+            label=f"Playtype efficiency comparison for {', '.join(labels)}",
         )
 
     @render.ui

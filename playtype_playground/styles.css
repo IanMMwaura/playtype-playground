@@ -1555,6 +1555,80 @@ body.body-controls-layout .bslib-sidebar-layout > .main {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.body-comparison-controls .body-control-grid {
+  grid-template-columns: minmax(280px, 1.6fr) repeat(2, minmax(95px, .5fr)) minmax(220px, 1.25fr);
+}
+
+.body-comparison-controls.comparison-mode-compact .body-control-grid {
+  grid-template-columns: minmax(280px, .9fr) minmax(320px, 1.1fr);
+}
+
+.comparison-season-selectors {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 20px 16px;
+}
+
+.comparison-season-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.comparison-season-grid .form-group {
+  margin: 0;
+}
+
+.comparison-player-season {
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+
+.comparison-player-season-name {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.comparison-player-season-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.comparison-season-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.radar-season-controls {
+  display: grid;
+  grid-template-columns: minmax(165px, 1.25fr) repeat(2, minmax(110px, .8fr)) minmax(165px, 1.15fr);
+  align-items: end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.overview-card > .card-header .card-heading {
+  flex: 0 1 320px;
+  min-width: 250px;
+}
+
+.overview-card > .card-header .radar-season-controls {
+  flex: 1 1 600px;
+  min-width: 0;
+}
+
+.overview-card .overview-meta {
+  white-space: nowrap;
+}
+
+.radar-season-controls .form-group {
+  margin: 0;
+}
+
 [data-bs-theme="light"] .body-control-panel {
   background: #f2f4f6;
 }
@@ -1566,9 +1640,20 @@ body.body-controls-layout .bslib-sidebar-layout > .main {
 }
 
 @media (max-width: 720px) {
-  .body-filter-controls .body-control-grid,
-  .body-chart-controls .body-control-grid {
+
+  .comparison-player-season-fields {
     grid-template-columns: 1fr;
+  }
+
+  .body-filter-controls .body-control-grid,
+  .body-chart-controls .body-control-grid,
+  .body-comparison-controls .body-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-season-controls {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .body-filter-actions {

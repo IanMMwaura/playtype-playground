@@ -72,10 +72,46 @@
     const chartSettings = panel("Chart settings", "body-chart-controls", chartItems);
     scatter.insertAdjacentElement("beforebegin", chartSettings);
 
+    const comparisonMode = document.getElementById("comparison_season_mode");
+    const comparisonStart = inputContainer("comparison_start");
+    const comparisonEnd = inputContainer("comparison_end");
     const comparePlayers = panel("Choose players", "body-comparison-controls", [
+      inputContainer("comparison_season_mode"),
+      comparisonStart,
+      comparisonEnd,
       inputContainer("compare_players"),
     ]);
     comparison.insertAdjacentElement("beforebegin", comparePlayers);
+    const comparisonSeasonSelectors = document.getElementById("comparison_season_selectors");
+    if (comparisonSeasonSelectors) {
+      comparePlayers.insertAdjacentElement("afterend", comparisonSeasonSelectors);
+    }
+
+    function syncComparisonMode() {
+      const hidden = Boolean(comparisonMode && comparisonMode.value !== "shared");
+      comparePlayers.classList.toggle("comparison-mode-compact", hidden);
+      [comparisonStart, comparisonEnd].forEach((control) => {
+        if (control) control.hidden = hidden;
+      });
+    }
+    if (comparisonMode) comparisonMode.addEventListener("change", syncComparisonMode);
+    syncComparisonMode();
+
+    const overviewMode = document.getElementById("overview_season_mode");
+    const overviewStart = inputContainer("radar_start");
+    const overviewEnd = inputContainer("radar_end");
+    const overviewLayer = inputContainer("overview_layer_seasons");
+    function syncOverviewMode() {
+      const hidden = Boolean(overviewMode && overviewMode.value !== "span");
+      [overviewStart, overviewEnd].forEach((control) => {
+        if (control) control.hidden = hidden;
+      });
+      if (overviewLayer) {
+        overviewLayer.hidden = Boolean(overviewMode && overviewMode.value === "single");
+      }
+    }
+    if (overviewMode) overviewMode.addEventListener("change", syncOverviewMode);
+    syncOverviewMode();
   }
 
   if (document.readyState === "loading") {
